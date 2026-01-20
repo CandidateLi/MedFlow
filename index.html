@@ -316,6 +316,25 @@
         fetchOnline();
     };
 
+// --- 新增：重写功能核心逻辑 ---
+    function restartCurrentQuiz() {
+        // 1. 弹出确认框，防止手滑
+        if(!confirm('⚠️ 确定要清除本卷的所有做题进度，并重新开始吗？\n(此操作无法撤销)')) return;
+        
+        // 2. 如果存在记录，则删除
+        if (quizProgress[currentTitle]) {
+            delete quizProgress[currentTitle]; // 从内存对象中删除
+            localStorage.setItem('pro_progress', JSON.stringify(quizProgress)); // 同步保存到硬盘
+        }
+        
+        // 3. 重新进入试卷
+        // 由于 quizProgress[currentTitle] 已经被删了，startQuiz 会认为这是一张新卷子
+        startQuiz(currentTitle, currentQs, currentMode);
+        
+        // 4. 滚回顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
 // --- 新增：发送邮件功能 ---
     function sendEmailReport() {
         const txt = document.getElementById('report-text').value;
@@ -755,4 +774,5 @@ ${txt}
 </script>
 </body>
 </html>
+
 
