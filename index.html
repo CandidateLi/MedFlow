@@ -62,7 +62,7 @@
         .exam-item {
             background: var(--card-bg); padding: 18px 20px; border-radius: 10px; margin-bottom: 12px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.03); display: flex; justify-content: space-between; align-items: center;
-            transition: all 0.2s; border: 1px solid transparent; cursor: pointer;
+            transition: all 0.2s; border: 1px solid transparent; cursor: pointer; position: relative;
         }
         .exam-item:hover {
             box-shadow: 0 5px 15px rgba(0,0,0,0.08); transform: translateY(-2px); border-color: #e0e0e0;
@@ -70,7 +70,11 @@
         .exam-title { font-size: 1.05rem; font-weight: 600; color: #333; margin-bottom: 4px; }
         .exam-sub { font-size: 0.85rem; color: #999; display: flex; align-items: center; gap: 6px; }
         
-        .del-btn { color: #e74c3c; padding: 5px 10px; border-radius: 4px; font-size: 0.9rem; }
+        .progress-badge {
+            font-size: 0.75rem; background: #e8f5e9; color: #27ae60; padding: 2px 6px; border-radius: 4px; margin-left: 8px; display: none;
+        }
+        
+        .del-btn { color: #e74c3c; padding: 5px 10px; border-radius: 4px; font-size: 0.9rem; z-index: 5; }
         .del-btn:hover { background: #fee; }
 
         /* 在线题库样式 */
@@ -79,7 +83,7 @@
 
         /* --- 3. 做题页面 --- */
         .view-section { display: none; }
-        .active-view { display: block; animation: fadeIn 0.2s; } /* 加快了动画速度 */
+        .active-view { display: block; animation: fadeIn 0.2s; } 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
         .quiz-header {
@@ -90,6 +94,12 @@
         }
         .btn-back { background: transparent; border: 1px solid var(--primary); color: var(--primary); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;}
         
+        .btn-restart {
+            font-size: 0.9rem; color: #333; background: #f0f0f0; border: 1px solid #ddd;
+            padding: 5px 12px; border-radius: 6px; cursor: pointer; margin-left: 8px;
+        }
+        .btn-restart:hover { background: #e0e0e0; }
+
         .btn-clear-err {
             font-size: 0.8rem; color: #e74c3c; background: #fff0f0; border: 1px solid #ffcccc;
             padding: 4px 10px; border-radius: 4px; cursor: pointer; display: none; margin-left: 10px;
@@ -98,7 +108,7 @@
         .card {
             background: var(--card-bg); border-radius: 12px; padding: 25px; 
             margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); 
-            border: 1px solid transparent; position: relative;
+            border: 1px solid transparent; position: relative; scroll-margin-top: 90px;
         }
 
         .card-top { display: flex; justify-content: space-between; margin-bottom: 15px; align-items: center;}
@@ -209,6 +219,8 @@
         <header class="quiz-header">
             <div style="display:flex; align-items:center;">
                 <button class="btn-back" onclick="switchView('home')">⬅ 结束</button>
+                <!-- 新增：重写按钮 -->
+                <button class="btn-restart" onclick="restartCurrentQuiz()">🔄 重写</button>
                 <button id="btn-clear-err" class="btn-clear-err" onclick="clearAllMistakes()">🗑 清空错题</button>
             </div>
             <h1 id="quiz-title" style="font-size: 1rem; margin:0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; text-align:center;"></h1>
@@ -289,9 +301,7 @@
         
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
             <button class="btn-ghost" onclick="document.getElementById('modal-report').style.display='none'">取消</button>
-            <!-- 原来的保存按钮 -->
             <button class="btn-main" onclick="submitReport()">保存记录</button>
-            <!-- 新增：发送邮件按钮 (绿色) -->
             <button class="btn-main" style="background-color: #27ae60;" onclick="sendEmailReport()">📧 发送给作者</button>
         </div>
     </div>
@@ -303,9 +313,12 @@
     let mistakes = JSON.parse(localStorage.getItem('pro_err') || '[]');
     let favorites = JSON.parse(localStorage.getItem('pro_fav') || '[]');
     let feedback = JSON.parse(localStorage.getItem('pro_feed') || '[]');
+    // 新增：全局进度缓存
+    let quizProgress = JSON.parse(localStorage.getItem('pro_progress') || '{}');
     
     let onlineListData = [];
     let currentQs = [];
+    let currentTitle = '';
     let isHighlightMode = false;
     let currentReportIdx = null;
     let currentMode = 'normal';
@@ -334,22 +347,18 @@
         // 4. 滚回顶部
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    
-// --- 新增：发送邮件功能 ---
+
     function sendEmailReport() {
         const txt = document.getElementById('report-text').value;
         if (!txt) return alert('请先填写反馈内容哦！');
 
-        // 获取当前题目信息（去掉HTML标签，防止乱码）
         const qData = currentQs[currentReportIdx];
         const qTextClean = qData.question.replace(/<[^>]+>/g, "").substring(0, 60); 
         const qSource = qData._source || "未知来源";
 
-        // 配置邮件信息
         const email = "3182568199@qq.com";
         const subject = `【临床题库纠错】来自用户的反馈`;
         
-        // 构建邮件正文
         const body = 
 `作者你好，我在练习时发现了问题：
 
@@ -362,20 +371,36 @@ ${txt}
 ----------------------------------
 (发送自 临床题库 Pro)`;
 
-        // 唤起邮件客户端
         window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        
-        // 关闭弹窗
         document.getElementById('modal-report').style.display = 'none';
     }
 
-    
     function saveData() {
         localStorage.setItem('pro_lib', JSON.stringify(library));
         localStorage.setItem('pro_err', JSON.stringify(mistakes));
         localStorage.setItem('pro_fav', JSON.stringify(favorites));
         localStorage.setItem('pro_feed', JSON.stringify(feedback));
         updateCounts();
+    }
+    
+    // 新增：保存进度函数
+    function saveQuizState(title, idx, data) {
+        if (!quizProgress[title]) quizProgress[title] = {};
+        quizProgress[title][idx] = data;
+        localStorage.setItem('pro_progress', JSON.stringify(quizProgress));
+    }
+
+    // 新增：重置当前进度
+    function resetCurrentQuiz() {
+        if(!confirm('确定要清除本卷进度并重写吗？')) return;
+        
+        if (quizProgress[currentTitle]) {
+            delete quizProgress[currentTitle];
+            localStorage.setItem('pro_progress', JSON.stringify(quizProgress));
+        }
+        
+        // 重新加载页面状态
+        startQuiz(currentTitle, currentQs, currentMode);
     }
     
     function updateCounts() {
@@ -391,12 +416,18 @@ ${txt}
         document.getElementById('empty-tip').style.display = library.length ? 'none' : 'block';
 
         library.forEach((exam, i) => {
+            // 检查是否有进度
+            const hasProgress = quizProgress[exam.title] && Object.keys(quizProgress[exam.title]).length > 0;
+
             const div = document.createElement('div');
             div.className = 'exam-item';
             div.onclick = (e) => { if(!e.target.closest('.del-btn')) startQuiz(exam.title, exam.questions); };
             div.innerHTML = `
                 <div>
-                    <div class="exam-title">${exam.title}</div>
+                    <div class="exam-title">
+                        ${exam.title}
+                        ${hasProgress ? '<span class="progress-badge">已存档</span>' : ''}
+                    </div>
                     <div class="exam-sub">${exam.questions.length} 道题目</div>
                 </div>
                 <div class="del-btn" onclick="deleteLib(${i})">🗑</div>
@@ -406,7 +437,6 @@ ${txt}
     }
 
     function openSmartSetup() {
-        // 先关掉主菜单
         document.getElementById('modal-menu').style.display = 'none';
 
         if(library.length === 0 && onlineListData.length === 0) return alert('暂无任何题库数据！');
@@ -476,7 +506,8 @@ ${txt}
             const finalQs = pool.slice(0, count);
 
             document.getElementById('modal-smart-setup').style.display = 'none';
-            startQuiz(`🧠 智能练习 (随机${count}题)`, finalQs);
+            // 智能组卷不需要缓存，标题加上时间戳或随机数以防冲突（或者直接不缓存）
+            startQuiz(`🧠 智能练习 (随机${count}题)`, finalQs, 'smart');
 
         } catch(e) {
             alert('生成失败: ' + e.message);
@@ -486,32 +517,99 @@ ${txt}
         }
     }
 
-    // --- 特殊模式入口 (极速版优化) ---
     function startSpecialExam(type) {
-        // 1. 立即关闭菜单，防止视觉悬停
         document.getElementById('modal-menu').style.display = 'none';
-
-        // 2. 检查数据
         const qs = (type === 'mistakes') ? mistakes : favorites;
         if(!qs.length) return alert('这里空空如也！先去做点题吧。');
-        
-        // 3. 启动
         startQuiz(type === 'mistakes' ? '📕 错题本' : '⭐ 收藏夹', qs, type);
     }
 
-    // --- 做题核心 ---
     function startQuiz(title, questions, mode = 'normal') {
         currentMode = mode;
+        currentTitle = title;
+        // 深拷贝防止引用修改
         currentQs = JSON.parse(JSON.stringify(questions)); 
+        
         document.getElementById('quiz-title').innerText = title;
         document.getElementById('btn-clear-err').style.display = (mode === 'mistakes') ? 'block' : 'none';
         
+        // 智能组卷模式和特殊模式下，不显示重写按钮（因为题目可能变动，且缓存意义不大）
+        const restartBtn = document.querySelector('.btn-restart');
+        if(mode === 'smart' || mode === 'mistakes' || mode === 'favorites') {
+             restartBtn.style.display = 'none';
+        } else {
+             restartBtn.style.display = 'block';
+        }
+
         switchView('quiz');
         renderCards();
-        updateProgress(0, currentQs.length);
+        
+        // --- 恢复进度逻辑 ---
+        let doneCount = 0;
+        let firstUndoneIndex = -1;
+
+        if (mode === 'normal' && quizProgress[title]) {
+            const progress = quizProgress[title];
+            Object.keys(progress).forEach(qIdxStr => {
+                const idx = parseInt(qIdxStr);
+                const record = progress[idx];
+                const card = document.getElementById(`q-${idx}`);
+                
+                if (card) {
+                    doneCount++;
+                    card.setAttribute('done', 'true');
+                    
+                    if (currentQs[idx].type === 'choice') {
+                        const opts = card.querySelectorAll('.opt-item');
+                        const correct = currentQs[idx].answer;
+                        const myOptIdx = record.myOpt;
+
+                        opts.forEach(o => o.classList.add('disabled'));
+                        
+                        if (myOptIdx == correct) {
+                            if(opts[myOptIdx]) opts[myOptIdx].classList.add('correct-bg');
+                        } else {
+                            if(opts[myOptIdx]) opts[myOptIdx].classList.add('wrong-bg');
+                            if(opts[correct]) opts[correct].classList.add('correct-bg');
+                        }
+                        showNote(idx, currentQs[idx].note, myOptIdx != correct);
+                    } else {
+                        // 填空题恢复
+                        const input = card.querySelector('.blank-input');
+                        input.value = record.myVal || '';
+                        input.disabled = true;
+                        if (record.isCorrect) {
+                            input.classList.add('correct-bg');
+                            showNote(idx, currentQs[idx].note, false);
+                        } else {
+                            input.classList.add('wrong-bg');
+                            showNote(idx, `参考答案: ${currentQs[idx].answer}。${currentQs[idx].note||''}`, true);
+                        }
+                    }
+                }
+            });
+
+            // 寻找第一个没做的题目
+            for(let i=0; i<currentQs.length; i++) {
+                if(!progress[i]) {
+                    firstUndoneIndex = i;
+                    break;
+                }
+            }
+        }
+
+        updateProgress(doneCount, currentQs.length);
         
         isHighlightMode = false;
         document.getElementById('hl-btn').classList.remove('active');
+
+        // 自动滚动到第一道未做题
+        if (firstUndoneIndex !== -1) {
+            setTimeout(() => {
+                const target = document.getElementById(`q-${firstUndoneIndex}`);
+                if(target) target.scrollIntoView({behavior: 'smooth', block: 'center'});
+            }, 300);
+        }
     }
 
     function renderCards() {
@@ -586,15 +684,22 @@ ${txt}
         const opts = card.querySelectorAll('.opt-item');
         opts.forEach(o => o.classList.add('disabled'));
 
-        if(optIdx == correct) {
+        const isCorrect = (optIdx == correct);
+
+        if(isCorrect) {
             el.classList.add('correct-bg');
         } else {
             el.classList.add('wrong-bg');
             if(opts[correct]) opts[correct].classList.add('correct-bg'); 
             recordMistake(currentQs[qIdx]); 
         }
-        showNote(qIdx, note, optIdx != correct);
+        showNote(qIdx, note, !isCorrect);
         updateProgress();
+
+        // 保存进度
+        if(currentMode === 'normal') {
+            saveQuizState(currentTitle, qIdx, { myOpt: optIdx, isCorrect: isCorrect });
+        }
     }
 
     function checkBlank(qIdx, input, correct, note) {
@@ -602,7 +707,11 @@ ${txt}
         if(card.getAttribute('done')) return;
         card.setAttribute('done', 'true');
         input.disabled = true;
-        if(input.value.trim() === correct) {
+
+        const val = input.value.trim();
+        const isCorrect = (val === correct);
+
+        if(isCorrect) {
             input.classList.add('correct-bg');
             showNote(qIdx, note, false);
         } else {
@@ -611,6 +720,11 @@ ${txt}
             recordMistake(currentQs[qIdx]);
         }
         updateProgress();
+
+        // 保存进度
+        if(currentMode === 'normal') {
+            saveQuizState(currentTitle, qIdx, { myVal: val, isCorrect: isCorrect });
+        }
     }
 
     function showNote(idx, note, isWrong) {
@@ -743,11 +857,17 @@ ${txt}
             el.innerHTML = '';
             
             onlineListData.forEach(item => {
+                const hasProgress = quizProgress[item.title] && Object.keys(quizProgress[item.title]).length > 0;
+                
                 const div = document.createElement('div');
                 div.className = 'exam-item';
                 div.innerHTML = `
                     <div style="flex:1;">
-                        <div class="exam-title">${item.title} <span class="online-tag">ONLINE</span></div>
+                        <div class="exam-title">
+                            ${item.title} 
+                            <span class="online-tag">ONLINE</span>
+                            ${hasProgress ? '<span class="progress-badge">已存档</span>' : ''}
+                        </div>
                         <div class="exam-sub">${item.desc}</div>
                     </div>
                     <div class="online-arrow">›</div>
@@ -774,5 +894,3 @@ ${txt}
 </script>
 </body>
 </html>
-
-
