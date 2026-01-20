@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedFlow - 临床题库</title>
+    <title>MedFlow - 临床题库 Pro</title>
     <style>
         /* --- 1. 经典 Pro 配色 --- */
         :root {
@@ -70,8 +70,9 @@
         .exam-title { font-size: 1.05rem; font-weight: 600; color: #333; margin-bottom: 4px; }
         .exam-sub { font-size: 0.85rem; color: #999; display: flex; align-items: center; gap: 6px; }
         
+        /* 进度徽章 */
         .progress-badge {
-            font-size: 0.75rem; background: #e8f5e9; color: #27ae60; padding: 2px 6px; border-radius: 4px; margin-left: 8px; display: none;
+            font-size: 0.75rem; background: #e8f5e9; color: #27ae60; padding: 2px 6px; border-radius: 4px; margin-left: 8px; display: none; font-weight: normal;
         }
         
         .del-btn { color: #e74c3c; padding: 5px 10px; border-radius: 4px; font-size: 0.9rem; z-index: 5; }
@@ -94,9 +95,10 @@
         }
         .btn-back { background: transparent; border: 1px solid var(--primary); color: var(--primary); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;}
         
+        /* 重写按钮样式 */
         .btn-restart {
             font-size: 0.9rem; color: #333; background: #f0f0f0; border: 1px solid #ddd;
-            padding: 5px 12px; border-radius: 6px; cursor: pointer; margin-left: 8px;
+            padding: 5px 12px; border-radius: 6px; cursor: pointer; margin-left: 8px; transition: background 0.2s;
         }
         .btn-restart:hover { background: #e0e0e0; }
 
@@ -219,7 +221,7 @@
         <header class="quiz-header">
             <div style="display:flex; align-items:center;">
                 <button class="btn-back" onclick="switchView('home')">⬅ 结束</button>
-                <!-- 新增：重写按钮 -->
+                <!-- 重写按钮：点击调用 restartCurrentQuiz -->
                 <button class="btn-restart" onclick="restartCurrentQuiz()">🔄 重写</button>
                 <button id="btn-clear-err" class="btn-clear-err" onclick="clearAllMistakes()">🗑 清空错题</button>
             </div>
@@ -313,7 +315,7 @@
     let mistakes = JSON.parse(localStorage.getItem('pro_err') || '[]');
     let favorites = JSON.parse(localStorage.getItem('pro_fav') || '[]');
     let feedback = JSON.parse(localStorage.getItem('pro_feed') || '[]');
-    // 新增：全局进度缓存
+    // 全局进度缓存
     let quizProgress = JSON.parse(localStorage.getItem('pro_progress') || '{}');
     
     let onlineListData = [];
@@ -328,25 +330,6 @@
         updateCounts();
         fetchOnline();
     };
-
-// --- 新增：重写功能核心逻辑 ---
-    function restartCurrentQuiz() {
-        // 1. 弹出确认框，防止手滑
-        if(!confirm('⚠️ 确定要清除本卷的所有做题进度，并重新开始吗？\n(此操作无法撤销)')) return;
-        
-        // 2. 如果存在记录，则删除
-        if (quizProgress[currentTitle]) {
-            delete quizProgress[currentTitle]; // 从内存对象中删除
-            localStorage.setItem('pro_progress', JSON.stringify(quizProgress)); // 同步保存到硬盘
-        }
-        
-        // 3. 重新进入试卷
-        // 由于 quizProgress[currentTitle] 已经被删了，startQuiz 会认为这是一张新卷子
-        startQuiz(currentTitle, currentQs, currentMode);
-        
-        // 4. 滚回顶部
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
 
     function sendEmailReport() {
         const txt = document.getElementById('report-text').value;
@@ -383,24 +366,30 @@ ${txt}
         updateCounts();
     }
     
-    // 新增：保存进度函数
+    // 保存进度函数
     function saveQuizState(title, idx, data) {
         if (!quizProgress[title]) quizProgress[title] = {};
         quizProgress[title][idx] = data;
         localStorage.setItem('pro_progress', JSON.stringify(quizProgress));
     }
 
-    // 新增：重置当前进度
-    function resetCurrentQuiz() {
-        if(!confirm('确定要清除本卷进度并重写吗？')) return;
+    // --- 重写功能：清除当前试卷记录 ---
+    function restartCurrentQuiz() {
+        // 1. 确认操作
+        if(!confirm('⚠️ 确定要清除本卷的所有做题进度，并重新开始吗？\n(此操作无法撤销)')) return;
         
+        // 2. 清除内存中的进度记录
         if (quizProgress[currentTitle]) {
             delete quizProgress[currentTitle];
+            // 3. 同步写入 LocalStorage
             localStorage.setItem('pro_progress', JSON.stringify(quizProgress));
         }
         
-        // 重新加载页面状态
+        // 4. 重新进入试卷（此时内存中已无进度，startQuiz 会渲染出全新的空试卷）
         startQuiz(currentTitle, currentQs, currentMode);
+        
+        // 5. 滚回顶部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     
     function updateCounts() {
@@ -416,7 +405,7 @@ ${txt}
         document.getElementById('empty-tip').style.display = library.length ? 'none' : 'block';
 
         library.forEach((exam, i) => {
-            // 检查是否有进度
+            // 检查是否有进度，如果有则显示“已存档”标签
             const hasProgress = quizProgress[exam.title] && Object.keys(quizProgress[exam.title]).length > 0;
 
             const div = document.createElement('div');
@@ -506,7 +495,7 @@ ${txt}
             const finalQs = pool.slice(0, count);
 
             document.getElementById('modal-smart-setup').style.display = 'none';
-            // 智能组卷不需要缓存，标题加上时间戳或随机数以防冲突（或者直接不缓存）
+            // 智能组卷模式
             startQuiz(`🧠 智能练习 (随机${count}题)`, finalQs, 'smart');
 
         } catch(e) {
@@ -533,7 +522,7 @@ ${txt}
         document.getElementById('quiz-title').innerText = title;
         document.getElementById('btn-clear-err').style.display = (mode === 'mistakes') ? 'block' : 'none';
         
-        // 智能组卷模式和特殊模式下，不显示重写按钮（因为题目可能变动，且缓存意义不大）
+        // 智能组卷模式和特殊模式下，不显示重写按钮
         const restartBtn = document.querySelector('.btn-restart');
         if(mode === 'smart' || mode === 'mistakes' || mode === 'favorites') {
              restartBtn.style.display = 'none';
