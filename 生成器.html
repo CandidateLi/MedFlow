@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>题库索引生成器</title>
+<style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f4f6f9; }
+    .box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    input { width: 100%; padding: 8px; margin: 5px 0 15px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;}
+    button { background: #4a90e2; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px;}
+    button:hover { background: #357abd; }
+    textarea { width: 100%; height: 200px; margin-top: 20px; border: 1px solid #ddd; padding: 10px; font-family: monospace; }
+    .item { background: #eef; padding: 10px; margin-bottom: 5px; border-radius: 4px; font-size: 0.9em; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<div class="box">
+    <h2>🛠 题库菜单生成器</h2>
+    
+    <label>1. 试卷标题 (显示的名字)</label>
+    <input type="text" id="title" placeholder="例如：内科学 - 呼吸系统">
+
+    <label>2. 简单描述 (副标题)</label>
+    <input type="text" id="desc" placeholder="例如：包含肺炎、哮喘等重点题">
+
+    <label>3. 文件名 (必须和data文件夹里的名字一模一样)</label>
+    <input type="text" id="file" placeholder="例如：huxi.json">
+
+    <button onclick="addItem()">⬇️ 添加到列表</button>
+
+    <div id="preview-list" style="margin-top:20px;"></div>
+
+    <hr>
+    <h3>生成结果 (repo_index.json 的内容)</h3>
+    <textarea id="result">[]</textarea>
+    <button style="background:#27ae60; width:100%;" onclick="copyResult()">📋 复制结果</button>
+</div>
+
+<script>
+    let list = [];
+
+    function addItem() {
+        const title = document.getElementById('title').value.trim();
+        const desc = document.getElementById('desc').value.trim();
+        let file = document.getElementById('file').value.trim();
+
+        if(!title || !file) { alert('标题和文件名必填！'); return; }
+
+        // 自动补全路径，如果用户没写 data/
+        if(!file.startsWith('data/')) {
+            file = 'data/' + file;
+        }
+
+        list.push({ title, desc, file });
+        render();
+        
+        // 清空输入框
+        document.getElementById('title').value = '';
+        document.getElementById('desc').value = '';
+        document.getElementById('file').value = '';
+    }
+
+    function render() {
+        // 更新预览列表
+        const previewEl = document.getElementById('preview-list');
+        previewEl.innerHTML = list.map((item, index) => 
+            `<div class="item"><span>${index+1}. ${item.title}</span> <span style="color:#666">(${item.file})</span></div>`
+        ).join('');
+
+        // 生成 JSON 代码
+        const jsonStr = JSON.stringify(list, null, 2);
+        document.getElementById('result').value = jsonStr;
+    }
+
+    function copyResult() {
+        const text = document.getElementById('result');
+        text.select();
+        document.execCommand('copy');
+        alert('已复制！快去粘贴到 repo_index.json 文件里吧。');
+    }
+</script>
+</body>
+</html>
